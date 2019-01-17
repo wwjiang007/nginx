@@ -2318,6 +2318,7 @@ ngx_http_subrequest(ngx_http_request_t *r,
     sr->unparsed_uri = r->unparsed_uri;
     sr->method_name = ngx_http_core_get_method;
     sr->http_protocol = r->http_protocol;
+    sr->schema = r->schema;
 
     ngx_http_set_exten(sr);
 
@@ -2384,6 +2385,14 @@ ngx_http_subrequest(ngx_http_request_t *r,
         sr->content_handler = r->content_handler;
         sr->phase_handler = r->phase_handler;
         sr->write_event_handler = ngx_http_core_run_phases;
+
+#if (NGX_PCRE)
+        sr->ncaptures = r->ncaptures;
+        sr->captures = r->captures;
+        sr->captures_data = r->captures_data;
+        sr->realloc_captures = 1;
+        r->realloc_captures = 1;
+#endif
 
         ngx_http_update_location_config(sr);
     }
@@ -3255,6 +3264,9 @@ ngx_http_core_create_srv_conf(ngx_conf_t *cf)
     cscf->ignore_invalid_headers = NGX_CONF_UNSET;
     cscf->merge_slashes = NGX_CONF_UNSET;
     cscf->underscores_in_headers = NGX_CONF_UNSET;
+
+    cscf->file_name = cf->conf_file->file.name.data;
+    cscf->line = cf->conf_file->line;
 
     return cscf;
 }
