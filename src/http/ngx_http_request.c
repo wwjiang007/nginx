@@ -1647,6 +1647,12 @@ ngx_http_alloc_large_header_buffer(ngx_http_request_t *r,
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "http large header copy: %uz", r->header_in->pos - old);
 
+    if (r->header_in->pos - old > b->end - b->start) {
+        ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
+                      "too large header to copy");
+        return NGX_ERROR;
+    }
+
     new = b->start;
 
     ngx_memcpy(new, old, r->header_in->pos - old);
@@ -1993,6 +1999,7 @@ ngx_http_process_request(ngx_http_request_t *r)
     if (r->http_connection->ssl) {
         long                      rc;
         X509                     *cert;
+        const char               *s;
         ngx_http_ssl_srv_conf_t  *sscf;
 
         if (c->ssl == NULL) {
@@ -2036,6 +2043,17 @@ ngx_http_process_request(ngx_http_request_t *r)
                 }
 
                 X509_free(cert);
+            }
+
+            if (ngx_ssl_ocsp_get_status(c, &s) != NGX_OK) {
+                ngx_log_error(NGX_LOG_INFO, c->log, 0,
+                              "client SSL certificate verify error: %s", s);
+
+                ngx_ssl_remove_cached_session(c->ssl->session_ctx,
+                                       (SSL_get0_session(c->ssl->connection)));
+
+                ngx_http_finalize_request(r, NGX_HTTPS_CERT_ERROR);
+                return;
             }
         }
     }
@@ -2973,6 +2991,12 @@ closed:
     if (err) {
         rev->error = 1;
     }
+
+#if (NGX_HTTP_SSL)
+    if (c->ssl) {
+        c->ssl->no_send_shutdown = 1;
+    }
+#endif
 
     ngx_log_error(NGX_LOG_INFO, c->log, err,
                   "client prematurely closed connection");
